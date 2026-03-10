@@ -23,7 +23,7 @@ Visualizes CO₂ storage volume over time based on thesis simulation data.
 - Timeframe: 2.5, 5, and 10 years post-injection
 **Output:**
 
-![CO2 Plume Growth](plume_growth.png)
+![CO2 Plume Growth](Modul1_Plume/plume_growth.png)
 
 ### 2. 4D Seismic Vp Anomaly Visualizer (`Modul2_Vp_Anomali/vp_anomaly.py`)
 Visualizes compressional wave velocity (Vp) changes due to CO₂ injection
