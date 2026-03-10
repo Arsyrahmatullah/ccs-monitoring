@@ -1,0 +1,17 @@
+ echo. > .gitignore
+```
+
+Nanti file `.gitignore` kosong muncul di sidebar sejajar dengan `README.md`. Klik, lalu isi dengan:
+```
+# Virtual environment
+venv/
+
+# Raw data — not tracked (large files + Equinor license)
+well_data/
+*.las
+*.segy
+*.sgy
+
+# Python cache
+__pycache__/
+*.pyc
