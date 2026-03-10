@@ -25,26 +25,42 @@ depth    = np.linspace(1000, 3000, 300)   # kedalaman (m)
 distance = np.linspace(0, 5000, 300)      # jarak lateral (m)
 D, X     = np.meshgrid(depth, distance)
 
-# ── Inisialisasi grid Vp ───────────────────────────────────
+# ── Inisialisasi grid Vp dengan gradien vertikal ──────────
 vp_before = np.zeros_like(D)
 vp_after  = np.zeros_like(D)
 
+# Gradient dalam setiap formasi (Vp naik ~100 m/s per 100m kedalaman)
+vp_gradient = 0.8  # m/s per meter kedalaman
+
 for name, (top, bot) in formations.items():
     mask = (D >= top) & (D < bot)
-    vp_before[mask] = vp_baseline[name]
-    vp_after[mask]  = vp_baseline[name]
+    # Vp baseline di top formasi + gradien ke bawah
+    vp_top = vp_baseline[name]
+    vp_before[mask] = vp_top + vp_gradient * (D[mask] - top)
+    vp_after[mask]  = vp_top + vp_gradient * (D[mask] - top)
 
-# ── Tambah anomali CO₂ plume (ellips di tengah Minahaki) ──
-# Plume terpusat di tengah lateral, di formasi Minahaki
-plume_center_x = 2500   # meter lateral
-plume_center_d = 1600   # meter kedalaman
-plume_radius_x = 800    # meter
-plume_radius_d = 150    # meter
+# ── Bentuk plume mushroom (buoyancy-driven) ───────────────
+# Terdiri dari dua bagian: stem (bawah) + cap (atas/melebar)
 
-plume_mask = (
-    ((X - plume_center_x) / plume_radius_x)**2 +
-    ((D - plume_center_d) / plume_radius_d)**2
+# Stem — zona injeksi langsung, sempit vertikal
+stem_mask = (
+    (np.abs(X - 2500) <= 150) &
+    (D >= 1500) & (D <= 1650)
+)
+
+# Cap — zona akumulasi di atas, melebar karena buoyancy
+cap_mask = (
+    ((X - 2500) / 600)**2 +
+    ((D - 1430) / 100)**2
 ) <= 1.0
+
+# Tambahan — lateral spread di tengah (transisi stem ke cap)
+mid_mask = (
+    ((X - 2500) / 300)**2 +
+    ((D - 1530) / 80)**2
+) <= 1.0
+
+plume_mask = stem_mask | cap_mask | mid_mask
 
 vp_after[plume_mask] = vp_after[plume_mask] * (1 + vp_anomaly_pct)
 
