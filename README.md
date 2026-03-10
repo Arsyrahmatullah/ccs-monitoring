@@ -46,3 +46,9 @@ Download for free at:
 
 ## 🚀 How to Run
 ```bash
+```
+git clone https://github.com/Arsyrahmatullah/ccs-monitoring.git
+cd ccs-monitoring
+pip install -r requirements.txt
+python Modul1_Plume/plume_growth.py
+```
