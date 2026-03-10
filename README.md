@@ -35,7 +35,21 @@ using a synthetic cross-section model based on thesis parameters.
 **Output:**
 
 ![Vp Anomaly](Modul2_Vp_Anomali/vp_anomaly.png)
+### 3. Streamlit Dashboard (`Modul3_Dashboard/app.py`)
+Interactive web dashboard combining all modules with adjustable parameters.
+- Real-time plume growth simulation
+- Interactive 4D seismic Vp anomaly visualizer
+- Parameter sliders: injection rate, simulation duration, Vp anomaly
 
+### 4. Gassmann Fluid Substitution (`Modul4_Gassmann/gassmann.py`)
+Rock physics modeling of seismic velocity changes due to CO₂ injection.
+- Fluid substitution: brine → supercritical CO₂
+- Wood's law for fluid mixing
+- Output: Vp, Vs, and ΔVp vs CO₂ saturation curves
+
+**Output:**
+
+![Gassmann](Modul4_Gassmann/gassmann.png)
 ---
 
 ## 🛠️ Tech Stack
