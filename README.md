@@ -21,6 +21,9 @@ Visualizes CO₂ storage volume over time based on thesis simulation data.
 - Injection rate: ~2 Mt/year
 - Reservoir: Minahaki & Matindok Formation
 - Timeframe: 2.5, 5, and 10 years post-injection
+**Output:**
+
+![CO2 Plume Growth](plume_growth.png)
 
 ### 2. 4D Seismic Vp Anomaly Visualizer (`Modul2_Vp_Anomali/vp_anomaly.py`)
 Visualizes compressional wave velocity (Vp) changes due to CO₂ injection
@@ -32,10 +35,6 @@ using a synthetic cross-section model based on thesis parameters.
 **Output:**
 
 ![Vp Anomaly](Modul2_Vp_Anomali/vp_anomaly.png)
-
-**Output:**
-
-![CO2 Plume Growth](plume_growth.png)
 
 ---
 
