@@ -1,0 +1,8 @@
+# CCS Monitoring & Simulation — Python dependencies
+# Python 3.10+ recommended
+
+numpy>=1.24
+scipy>=1.10
+matplotlib>=3.7
+streamlit>=1.28
+lasio>=0.31
