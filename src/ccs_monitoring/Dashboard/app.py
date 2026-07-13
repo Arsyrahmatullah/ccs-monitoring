@@ -12,6 +12,7 @@ import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
+import lasio
 
 # EXACT CAPS LOCK IMPORTS: Sinkron 100% dengan nama folder di sidebar VS Code kamu
 from ccs_monitoring.presets import RESERVOIR_PRESETS
@@ -28,7 +29,7 @@ def estimate_supercritical_co2_density(pressure_mpa, temperature_c):
     rho = 750.0 + (pressure_mpa * 12.5) - (temperature_c * 4.2)
     return np.clip(rho, 400.0, 850.0)
 
-# ── 1. GLOBAL GLOBAL SIDEBAR CONFIGURATION & DRIVERS ──────────────────
+# ── 1. GLOBAL SIDEBAR CONFIGURATION & DRIVERS ──────────────────
 st.set_page_config(page_title="Advanced CCS Monitoring Suite", layout="wide")
 
 st.sidebar.header("🧭 Global Site Selection")
@@ -76,8 +77,7 @@ t_res = t_surf + (geo_grad * (res_depth / 100.0))
 storage_efficiency = phi_val * 0.75 * 0.75  # NetToGross * Swirr constant proxy bounds
 current_radius = np.sqrt((total_mass_mt * 1e9) / (np.pi * res_thickness * storage_efficiency * rho_co2_kg))
 
-# ── 3. CRITICAL FIX: GLOBAL REAL-TIME 2D MESH PIPELINE ────────────────
-# Perhitungan ini ditaruh di level global agar langsung merespon slider di halaman mana pun!
+# ── 3. GLOBAL REAL-TIME 2D MESH PIPELINE ──────────────────────────────
 nx, nz = 140, 100
 x_axis = np.linspace(0, 4000, nx)
 z_axis = np.linspace(1000, 2500, nz)
@@ -145,7 +145,6 @@ def page_plume():
     t_axis = np.linspace(0, 15, 100)
     mass_axis = (inj_rate * 1e9) * t_axis
     
-    # Uncertainty envelope calculations based on local porosity variations
     eff_low = max(0.01, phi_val - 0.03) * 0.75 * 0.75
     eff_high = (phi_val + 0.03) * 0.75 * 0.75
     
@@ -212,37 +211,105 @@ def page_gassmann():
     st.pyplot(fig)
 
 def page_well_log():
-    st.title("🪵 Well Section Log Analysis (Sleipner Confined Model)")
-    st.markdown("Restricting fluid substitution exclusively inside the target injection reservoir boundaries.")
+    st.title("🪵 Well Section Log Analysis (LAS Core Integration)")
+    st.markdown("Confining supercritical fluid substitution explicitly inside targeted petrophysical boundaries.")
     
-    log_z = np.linspace(800, 1100, 200)
-    log_vp = 3700.0 - 2400.0 * phi_val + 50.0 * np.random.randn(200)
-    log_vs = log_vp / 1.85
-    log_rho_kg = np.full(200, rho_matrix_kg * 0.86)
+    # ── NEW: ADVANCED LAS FILE UPLOADER ENGINE ──
+    log_mode = st.radio("Select Data Log Source Matrix:", ["Use Demo Synthetic Sleipner Proxy Log", "Upload Custom Petrophysical .LAS File"])
     
+    log_z, log_vp, log_phi, log_rho = None, None, None, None
+    is_las_loaded = False
+    
+    if log_mode == "Upload Custom Petrophysical .LAS File":
+        uploaded_file = st.file_uploader("Upload Reservoir Wireline ASCII Log (.las)", type=["las"])
+        if uploaded_file is not None:
+            try:
+                # Read string buffer natively from streamlit binary memory bytes
+                string_data = uploaded_file.read().decode("utf-8", errors="ignore")
+                las = lasio.read(string_data)
+                
+                # Dynamic curve key mapping to bypass case-sensitivity constraints
+                curves = {c.mnemonic.upper(): c.data for c in las.curves}
+                
+                # Extract Depth curve proxy
+                log_z = las.depth_m if hasattr(las, 'depth_m') else curves.get('DEPTH') or curves.get('DEPT')
+                
+                # Extract elastic sonic velocity and density property curves
+                log_vp = curves.get('VP') or (304800.0 / curves.get('DT') if curves.get('DT') is not None else None)
+                log_phi = curves.get('NPHI') or curves.get('PHIE') or curves.get('POR')
+                log_rho = curves.get('RHOB') or curves.get('DEN')
+                
+                if log_z is not None and log_vp is not None and log_phi is not None:
+                    # Sanitize any data gaps/NaN constraints
+                    valid_mask = ~np.isnan(log_z) & ~np.isnan(log_vp) & ~np.isnan(log_phi)
+                    log_z, log_vp, log_phi = log_z[valid_mask], log_vp[valid_mask], log_phi[valid_mask]
+                    log_rho = log_rho[valid_mask] if log_rho is not None else np.full(len(log_z), rho_matrix_kg * 0.86)
+                    
+                    # Core unit transformation checks (Convert density to SI if logged in g/cm3)
+                    if np.max(log_rho) < 10.0: log_rho *= 1000.0
+                    
+                    is_las_loaded = True
+                    st.success(f"📊 Successfully loaded custom log: parsed {len(log_z)} active log depth metrics.")
+                else:
+                    st.error("❌ Key curves missing: The uploaded LAS file must contain at least DEPTH, VP (or DT), and Porosity (NPHI/PHIE).")
+            except Exception as e:
+                st.error(f"❌ Parser Error: Failed to interpret file format architecture. Reason: {str(e)}")
+                
+    if not is_las_loaded:
+        if log_mode == "Upload Custom Petrophysical .LAS File":
+            st.info("💡 Awaiting file submission... Displaying standard fallback Sleipner proxy log configuration below.")
+        
+        # Solid dynamic fallback benchmark log configuration matrix
+        log_z = np.linspace(800, 1100, 250)
+        log_phi = np.clip(phi_val + 0.15 + 0.015 * np.random.randn(250), 0.10, 0.42)
+        log_rho = 2650.0 * (1.0 - log_phi) + 1000.0 * log_phi
+        log_vp = 3800.0 - 2600.0 * log_phi + 40.0 * np.random.randn(250)
+
+    # ── COMPUTE INJECTION INTERVAL BOUNDS ──
+    st.markdown("#### Injection Perforation Zone Configuration")
+    min_z, max_z = float(np.min(log_z)), float(np.max(log_z))
+    top_res = st.slider("Top Perforation Boundary (m)", min_z, max_z, min_z + (max_z - min_z)*0.4)
+    base_res = st.slider("Base Perforation Boundary (m)", min_z, max_z, top_res + 60.0)
+    
+    log_vs = log_vp / 1.85 # Constant shear estimation fallback matrix
     log_vp_mon = log_vp.copy()
+    
     for idx in range(len(log_z)):
-        current_s = s_co2 if 920.0 <= log_z[idx] <= 980.0 else 0.0
+        current_s = s_co2 if top_res <= log_z[idx] <= base_res else 0.0
         v_m, _, _ = gassmann_substitution(
-            log_vp[idx], log_vs[idx], log_rho_kg[idx], phi_val, current_s,
+            log_vp[idx], log_vs[idx], log_rho[idx], log_phi[idx], current_s,
             site["k_m"], site["k_brine"], site["k_co2"], rho_brine_kg, rho_co2_kg, rho_matrix_kg,
             mixing_law, brie_exp
         )
         log_vp_mon[idx] = v_m
         
-    fig, axes = plt.subplots(1, 2, figsize=(9, 5.5), sharey=True)
-    axes[0].plot(log_vp, log_z, color='gray', label='Baseline')
-    axes[0].plot(log_vp_mon, log_z, color='crimson', label='CO2 Substituted')
-    axes[0].axhspan(920, 980, color='yellow', alpha=0.15, label='Target Reservoir')
-    axes[0].set_xlabel('Velocity Vp (m/s)')
-    axes[0].legend(loc='lower left')
+    # Render Diagnostics Graphics
+    fig, axes = plt.subplots(1, 3, figsize=(11, 6), sharey=True)
     
-    axes[1].plot(((log_vp_mon - log_vp)/log_vp)*100.0, log_z, color='crimson')
-    axes[1].axhspan(920, 980, color='yellow', alpha=0.15)
-    axes[1].set_xlabel('Delta Velocity Anomaly ΔVp (%)')
+    axes[0].plot(log_phi, log_z, color='darkgreen', alpha=0.8, linewidth=1.2)
+    axes[0].axhspan(top_res, base_res, color='yellow', alpha=0.15, label='Perforated Zone')
+    axes[0].set_xlabel('Measured Porosity (v/v)', weight='bold')
+    axes[0].set_title('Porosity Profile', weight='bold')
+    axes[0].grid(True, alpha=0.3)
+    
+    axes[1].plot(log_vp, log_z, color='gray', label='Baseline (Brine)', alpha=0.7)
+    axes[1].plot(log_vp_mon, log_z, color='crimson', label='Monitor (CO2)', linewidth=1.5)
+    axes[1].axhspan(top_res, base_res, color='yellow', alpha=0.15)
+    axes[1].set_xlabel('Velocity Vp (m/s)', weight='bold')
+    axes[1].set_title('Fluid Substitution Log', weight='bold')
+    axes[1].grid(True, alpha=0.3)
+    axes[1].legend(loc='lower left')
+    
+    log_delta_vp = ((log_vp_mon - log_vp) / log_vp) * 100.0
+    axes[2].plot(log_delta_vp, log_z, color='crimson', linewidth=1.5)
+    axes[2].axhspan(top_res, base_res, color='yellow', alpha=0.15)
+    axes[2].axvline(x=0.0, color='black', linestyle='--', alpha=0.5)
+    axes[2].set_xlabel('Time-Lapse ΔVp Anomaly (%)', weight='bold')
+    axes[2].set_title('4D Sonic Delta Anomaly', weight='bold')
+    axes[2].grid(True, alpha=0.3)
     
     axes[0].invert_yaxis()
-    axes[0].set_ylabel('Log Measured Depth (m)')
+    axes[0].set_ylabel('Measured Structural Depth (m)', fontsize=11, weight='bold')
     plt.tight_layout()
     st.pyplot(fig)
 
@@ -250,7 +317,6 @@ def page_alerts():
     st.title("🚨 Automated Anomaly Alerts Console")
     st.markdown("### Modul 6 Analytics: Combined Time-Lapse Trace Analytics Framework")
     
-    # Live execution utilizing real-time calculated global matrices
     nrms_profile = calculate_4d_trace_nrms(vp_base, rho_base, vp_mon, rho_mon, frequency=wavelet_freq)
     z_score_field = compute_velocity_z_score(vp_base, vp_mon)
     max_z_profile = np.abs(np.min(z_score_field, axis=0))
