@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ccs_monitoring"
+version = "1.0.0"
+description = "Advanced Carbon Capture and Storage (CCS) Subsurface Fluid & Seismic Monitoring Simulator"
+readme = "README.md"
+authors = [
+    { name = "Arsy Nuur Rahmatullah" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    "numpy>=1.22.0",
+    "matplotlib>=3.5.0",
+    "scipy>=1.8.0",
+    "streamlit>=1.10.0",
+    "lasio>=0.30.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
