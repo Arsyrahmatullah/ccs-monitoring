@@ -1,12 +1,4 @@
 # src/ccs_monitoring/Anomaly/anomaly_detection.py
-import os
-import sys
-
-current_dir = os.path.dirname(os.path.abspath(__file__))
-src_dir = os.path.abspath(os.path.join(current_dir, "../.."))
-if src_dir not in sys.path:
-    sys.path.insert(0, src_dir)
-
 import numpy as np
 
 try:
@@ -15,10 +7,7 @@ except ModuleNotFoundError:
     from ccs_monitoring.seismic.vp_anomaly import create_ricker_wavelet, generate_seismic_trace
 
 def calculate_4d_trace_nrms(vp_base, rho_base, vp_mon, rho_mon, frequency=30, dt=0.002):
-    """
-    Computes the 4D time-lapse seismic nRMS error profile profile using zero-mean 
-    synthetic traces to prevent background magnitude masking.
-    """
+    """Computes the 4D time-lapse seismic nRMS profile using zero-mean synthetic amplitude traces."""
     nz, nx = vp_base.shape
     wavelet = create_ricker_wavelet(frequency, dt)
     nrms_profile = np.zeros(nx)
@@ -35,19 +24,10 @@ def calculate_4d_trace_nrms(vp_base, rho_base, vp_mon, rho_mon, frequency=30, dt
     return nrms_profile
 
 def compute_velocity_z_score(vp_base, vp_mon):
-    """
-    Computes a localized statistical Z-Score field from the percentage velocity drop profile
-    to isolate fluid migration signatures from background geostatistical noise.
-    """
-    # Calculate percentage velocity alteration delta
+    """Computes localized statistical Z-Score from the velocity drop metrics."""
     delta_vp = ((vp_mon - vp_base) / vp_base) * 100.0
-    
     mean_val = np.mean(delta_vp)
     std_val = np.std(delta_vp)
-    
     if std_val < 1e-4:
         return np.zeros_like(delta_vp)
-        
-    # Standardized Z-Score calculation matrix
-    z_score_field = (delta_vp - mean_val) / std_val
-    return z_score_field
+    return (delta_vp - mean_val) / std_val
