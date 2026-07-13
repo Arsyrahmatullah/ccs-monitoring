@@ -8,86 +8,94 @@ This project digitizes and extends results from an undergraduate thesis on
 **CO₂ storage feasibility using 4D seismic monitoring** at the Matindok–Donggi–Senoro  
 gas field complex, Central Sulawesi, Indonesia.
 
-The study used Petrel to simulate compressional wave velocity (Vp) changes due to CO₂ injection into the Minahaki Carbonate Formation, now fully refactored into a modern, automated Python package layout.
+The study used Petrel to simulate compressional wave velocity ($V_p$) changes due to $\text{CO}_2$ injection into the Minahaki Carbonate Formation, now fully refactored into a modern, automated Python package layout.
 
 ---
 
 ## 🗂️ Modules & Package Structure
 
-Proyek ini telah disusun ulang ke dalam struktur paket `src/` modular untuk memisahkan mesin perhitungan sains dengan halaman visualisasi:
+This project has been restructured into a modular `src/` package layout to cleanly isolate the core geophysical calculation engines from the presentation layer:
 
 ### 1. Central Site Presets (`src/ccs_monitoring/presets.py`)
-Menyediakan dropdown pilihan parameter reservoir terkalibrasi langsung dari literatur dunia nyata secara terpusat:
-- **Matindok (Thesis Reference)**: Formasi Karbonat Minahaki, Sulawesi Tengah.
-- **Sleipner Utsira (North Sea)**: Benchmark sand aquifer standar industri.
-- **Baltic Sea Yoldia (Aquifer)**: Model batuan pasir untuk *patchy saturation*.
+Provides a centralized, literature-calibrated reservoir parameter matrix driven by a global selection menu:
+- **Matindok (Thesis Reference)**: Minahaki Carbonate Formation, Central Sulawesi.
+- **Sleipner Utsira (North Sea)**: Standard industrial sandstone aquifer benchmark.
+- **Baltic Sea Yoldia (Aquifer)**: Regional deep sandstone layer optimized for patchy evaluation.
 
 ---
 
 ### 2. CO₂ Plume Growth Simulation (`src/ccs_monitoring/Plume/`)
-Visualisasi perluasan volume *plume* karbon secara radial dari sumur injeksi.
-- Model aliran *power-law* ($t^{0.5}$) dynamic gravity current.
-- Ditambah **Porosity Uncertainty Band (±3%)** untuk melihat batas ketidakpastian volume reservoir.
+Visualizes the lateral radial expansion footprint of the injected carbon mass over time.
+- Driven by a fluid-dynamic gravity current power-law model ($t^{0.5}$).
+- Features a **Porosity Uncertainty Band (±3%)** to map subsurface reservoir matrix variances.
 
-**Output Manual (CLI):** `src/ccs_monitoring/Plume/plume_growth.png`
+**Output:**
+![CO2 Plume Growth](src/ccs_monitoring/Plume/plume_growth.png)
 
 ---
 
 ### 3. 4D Seismic Vp Anomaly Visualizer (`src/ccs_monitoring/Seismic/`)
-Visualisasi penampang bumi 2D yang heterogen alami akibat injeksi gas.
-- Menggunakan **Gaussian Random Field Texture** untuk menghasilkan efek variasi noise geologi asli.
-- Pemodelan geometri **Mushroom-shaped CO₂ plume** akibat gaya apung fluida (*buoyancy-driven*).
+Generates 2D geological slice cross-sections displaying velocity responses post-fluid substitution.
+- Implements a **Gaussian Random Field Texture** to mimic realistic geological background noise textures.
+- Models a buoyancy-driven **mushroom-shaped CO₂ plume** framework natively synchronized across the suite.
 
-**Output Manual (CLI):** `src/ccs_monitoring/Seismic/vp_anomaly.png`
+**Output:**
+![Vp Anomaly](src/ccs_monitoring/Seismic/vp_anomaly.png)
 
 ---
 
 ### 4. Gassmann Fluid Substitution (`src/ccs_monitoring/Rock_physics/`)
-Pemodelan fisika batuan (*rock physics*) untuk menghitung perubahan kecepatan gelombang seismik.
-- Menggunakan rumus **Inversi Simbolik Eksak** (`sympy`) untuk menghitung modulus kering batuan tanpa eror aproksimasi fluida.
-- **Toggle Theory**: Pilihan pencampuran fluida antara Wood's Law (Uniform Saturation) dan Brie's Empirical Law (Patchy Saturation).
+Rock physics engine evaluating subsurface acoustic velocity shifts caused by carbon injection.
+- Employs an **Exact Symbolic Inversion** derived via `sympy` to solve for dry rock modulus ($K_{dry}$) without fluid compressibility approximation errors.
+- **Toggle Matrix Theory**: Selectable fluid mixing laws between Wood's Law (Uniform Saturation) and Brie's Empirical Law (Patchy Saturation).
+
+**Output:**
+![Gassmann](src/ccs_monitoring/Rock_physics/gassmann.png)
 
 ---
 
 ### 5. Well Log Integration & Multi-Page Dashboard (`src/ccs_monitoring/Dashboard/`)
-Aplikasi web interaktif multi-halaman yang menyatukan semua modul di atas dengan navigasi sidebar radio button yang reaktif.
-- **LAS File Uploader**: Mendukung unggah file sumur bor asli format `.las` menggunakan parser `lasio`.
-- Menyediakan *Demo Proxy Log* otomatis jika dijalankan tanpa file eksternal.
+An interactive multi-page web application managing all modules via a unified, reactive sidebar radio navigation matrix.
+- **LAS File Uploader**: Features a native `.las` wireline log parsing interface powered by `lasio`.
+- Generates dynamic synthetic fallback proxy models automatically for seamless testing.
 
 ---
 
 ### 6. Anomaly Detection & Alerts (`src/ccs_monitoring/Anomaly/`)
-Integrasi Modul 6 untuk mengevaluasi tingkat risiko dan keamanan batas penyimpanan bawah tanah.
-- **Zero-Mean Trace nRMS Profile**: Kalkulasi perubahan amplitudo seismik sintetik agar sensitivitas metrik tidak kolaps.
-- **Statistical Z-Score Deviation Field**: Mengisolasi sinyal migrasi fluida liar dari *background noise* geologi sekitarnya.
+Integrates core trace analytics and risk containment diagnostics to evaluate operational boundaries.
+- **Zero-Mean Trace nRMS Profile**: Converts properties into a synthetic seismic trace via Ricker Wavelet convolution to prevent detector sensitivity collapse.
+- **Statistical Z-Score Deviation Field**: Isolates fluid migration anomalies from background geostatistical noise.
+
+**Output:**
+![Anomaly Detection](src/ccs_monitoring/Anomaly/anomaly_detection.png)
 
 ---
 
 ## 📥 Data Setup
 
-Halaman *Well Log Analysis* mendukung file `.las` kustom Anda sendiri. Jika Anda ingin menguji menggunakan data benchmark sumur Sleipner dari Equinor:
+The *Well Log Analysis* module dynamically reads custom user-supplied files. If you want to benchmark the system using the official Sleipner dataset from Equinor:
 
-1. Unduh data secara gratis di: **https://co2datashare.org/dataset/sleipner-2019-benchmark-model**
-2. Pilih bagian **"Well data (2.1.2 - Well logs)"**
-3. Ekstrak dan gunakan tombol **Upload** pada halaman dashboard untuk memasukkan file `.las` tersebut ke aplikasi.
+1. Go to: **https://co2datashare.org/dataset/sleipner-2019-benchmark-model**
+2. Download **"Well data (2.1.2 - Well logs)"**
+3. Extract the contents and use the **Upload** button directly inside the dashboard panel to submit your target `.las` file.
 
 ---
 
 ## 🛠️ Tech Stack
 | Tool | Purpose |
 |---|---|
-| Python 3.10+ | Core language framework |
-| NumPy, SciPy | Numerical grid computing |
-| Matplotlib | Subsurface section visualization |
-| Streamlit | Interactive multi-page dashboard |
-| lasio | LAS well log file reader engine |
-| PyTest | Automated physics validation tests |
+| Python 3.10+ | Core development framework |
+| NumPy, SciPy | Numerical grid matrix computation |
+| Matplotlib | Subsurface visualization and plotting |
+| Streamlit | Interactive multi-page dashboard presentation layer |
+| lasio | LAS wireline log file reader engine |
+| PyTest | Automated physics regression testing |
 
 ---
 
 ## 🚀 How to Run
 
-### 1. Install Paket Lokal (Editable Mode)
+### 1. Provision Local Package (Editable Mode)
 ```bash
 git clone [https://github.com/Arsyrahmatullah/ccs-monitoring.git](https://github.com/Arsyrahmatullah/ccs-monitoring.git)
 cd ccs-monitoring/ccs-monitoring
