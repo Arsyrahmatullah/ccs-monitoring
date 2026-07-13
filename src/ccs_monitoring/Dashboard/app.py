@@ -13,284 +13,304 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
 
-# EXACT CAPS LOCK IMPORTS: Mengikuti nama folder kapital sesuai sidebar VS Code kamu
+# EXACT CAPS LOCK IMPORTS: Sinkron 100% dengan nama folder di sidebar VS Code kamu
+from ccs_monitoring.presets import RESERVOIR_PRESETS
 from ccs_monitoring.Rock_physics.gassmann import gassmann_substitution
-from ccs_monitoring.Seismic.vp_anomaly import create_ricker_wavelet, generate_seismic_trace, calculate_4d_seismic_nrms
+from ccs_monitoring.Anomaly.anomaly_detection import calculate_4d_trace_nrms, compute_velocity_z_score
+try:
+    from ccs_monitoring.Seismic.vp_anomaly import create_ricker_wavelet, generate_seismic_trace
+except ModuleNotFoundError:
+    from ccs_monitoring.seismic.vp_anomaly import create_ricker_wavelet, generate_seismic_trace
 
-# Local Thermodynamic Helper to guarantee stability
+# Local Thermodynamic Helper to guarantee density calculation stability
 def estimate_supercritical_co2_density(pressure_mpa, temperature_c):
     """Approximates supercritical CO2 density (kg/m3) dynamically."""
     rho = 750.0 + (pressure_mpa * 12.5) - (temperature_c * 4.2)
     return np.clip(rho, 400.0, 850.0)
 
-# ── GLOBAL CONFIGURATION & SIDEBAR DRIVERS ────────────────────────
+# ── 1. GLOBAL GLOBAL SIDEBAR CONFIGURATION & DRIVERS ──────────────────
 st.set_page_config(page_title="Advanced CCS Monitoring Suite", layout="wide")
 
-st.sidebar.header("🛠️ Global Control Center")
+st.sidebar.header("🧭 Global Site Selection")
+selected_preset_name = st.sidebar.selectbox(
+    "Choose Target Site Preset:", 
+    list(RESERVOIR_PRESETS.keys()),
+    help="Select a benchmark geological field framework to supply baseline physical parameters."
+)
 
-st.sidebar.subheader("1. In-Situ Reservoir Sizing")
-res_depth = st.sidebar.slider("Target Depth (m)", 1200.0, 2200.0, 1600.0, 50.0)
-res_thickness = st.sidebar.slider("Gross Thickness H (m)", 30.0, 150.0, 80.0, 5.0)
+# Load selected configuration array from central preset library
+site = RESERVOIR_PRESETS[selected_preset_name]
+st.sidebar.info(f"📄 **Source Citation:**\n{site['citation']}")
 
-st.sidebar.subheader("2. Fluid Dynamics & Petrophysics")
-inj_rate = st.sidebar.slider("Injection Rate (Mt/year)", 0.5, 3.0, 1.355, 0.005)
-years = st.sidebar.slider("Simulation Horizon (Years)", 1.0, 15.0, 10.0, 0.5)
-phi = st.sidebar.slider("Effective Porosity (phi)", 0.05, 0.35, 0.13, 0.01)
-s_co2 = st.sidebar.slider("CO2 Saturation (S_CO2)", 0.10, 0.90, 0.45, 0.05)
+st.sidebar.markdown("---")
+st.sidebar.header("🛠️ Local Tuning Controls")
 
-st.sidebar.subheader("3. 4D Seismic Configuration")
-freq = st.sidebar.slider("Ricker Frequency (Hz)", 15, 60, 30, 5)
-threshold = st.sidebar.slider("Alert Threshold nRMS (%)", 2.0, 20.0, 8.0, 0.5)
+# Seed default sliders dynamically based on literature configuration guidelines
+phi_val = st.sidebar.slider("Porosity override (phi)", 0.05, 0.45, float(site["phi"]), 0.01)
+s_co2 = st.sidebar.slider("CO2 Fluid Saturation (S_CO2)", 0.0, 1.0, 0.45, 0.05)
+mixing_law = st.sidebar.radio("Fluid Saturation Theory:", ["wood", "brie"], index=0)
+brie_exp = st.sidebar.slider("Brie Patchy Exponent (e)", 1.0, 5.0, 3.0, 0.5) if mixing_law == "brie" else 3.0
 
-# Shared Subsurface Calculation Core
-p_surf, t_surf, rho_b, g_acc, geo_grad = 0.1013, 25.0, 1025.0, 9.81, 3.5
-p_res = p_surf + (rho_b * g_acc * res_depth) * 1e-6
-t_res = t_surf + (geo_grad * (res_depth / 100.0))
-rho_co2_val = estimate_supercritical_co2_density(p_res, t_res)
+st.sidebar.subheader("Subsurface Boundary In-situ Matrix")
+res_depth = st.sidebar.slider("Target Injection Depth (m)", 1000, 2500, 1600, 50)
+res_thickness = st.sidebar.slider("Gross Formation Thickness H (m)", 20, 150, 80, 5)
+inj_rate = st.sidebar.slider("Mass Injection Rate (Mt/year)", 0.5, 3.0, 1.355, 0.05)
+years = st.sidebar.slider("Time Horizon Tracker (Years)", 1.0, 15.0, 10.0, 0.5)
 
-net_to_gross, s_wirr = 0.75, 0.25
-storage_eff = phi * net_to_gross * (1.0 - s_wirr)
+st.sidebar.subheader("Time-Lapse Seismic Wavelet")
+wavelet_freq = st.sidebar.slider("Ricker Peak Frequency (Hz)", 15, 60, 30, 5)
+alert_threshold = st.sidebar.slider("nRMS Anomaly Alert Limit (%)", 1.0, 20.0, 8.0, 0.5)
+
+# Convert densities from g/cm³ preset records to strict SI kg/m³ for gassmann engine safety
+rho_matrix_kg = site["rho_matrix"] * 1000.0
+rho_brine_kg = site["rho_brine"] * 1000.0
+rho_co2_kg = site["rho_co2"] * 1000.0
+
+# ── 2. GLOBAL SHARED UNDERGROUND CALCULATIONS ─────────────────────────
 total_mass_mt = inj_rate * years
-current_radius = np.sqrt((total_mass_mt * 1e9) / (np.pi * res_thickness * storage_eff * rho_co2_val))
+p_surf, t_surf, g_acc, geo_grad = 0.1013, 25.0, 9.81, 3.5
+p_res = p_surf + (rho_brine_kg * g_acc * res_depth) * 1e-6 # Hydrostatic MPa
+t_res = t_surf + (geo_grad * (res_depth / 100.0))
 
-# ── PAGES DEFINITION MATRIX ───────────────────────────────────────
+# Volumetric propagation sizing driven by centrally loaded presets
+storage_efficiency = phi_val * 0.75 * 0.75  # NetToGross * Swirr constant proxy bounds
+current_radius = np.sqrt((total_mass_mt * 1e9) / (np.pi * res_thickness * storage_efficiency * rho_co2_kg))
+
+# ── 3. CRITICAL FIX: GLOBAL REAL-TIME 2D MESH PIPELINE ────────────────
+# Perhitungan ini ditaruh di level global agar langsung merespon slider di halaman mana pun!
+nx, nz = 140, 100
+x_axis = np.linspace(0, 4000, nx)
+z_axis = np.linspace(1000, 2500, nz)
+X_grid, Z_grid = np.meshgrid(x_axis, z_axis)
+
+np.random.seed(42)
+spatial_noise = gaussian_filter(np.random.randn(nz, nx), sigma=(4, 10))
+spatial_noise /= np.std(spatial_noise)
+
+vp_base = np.zeros((nz, nx))
+for i in range(nz):
+    depth = z_axis[i]
+    vp_base[i, :] = (2800.0 + 0.5 * (depth - 1000.0)) * (1.0 + 0.03 * spatial_noise[i, :])
+    
+vs_mon = vp_base / 1.74
+rho_base = np.full((nz, nx), rho_matrix_kg * 0.85)
+
+vp_mon = vp_base.copy()
+rho_mon = rho_base.copy()
+c_x, c_z, r_x, r_z = 2000, res_depth, current_radius * 1.1, res_thickness * 0.5
+
+for i in range(nz):
+    for j in range(nx):
+        dz = (z_axis[i] - c_z) / r_z
+        if -1.0 <= dz <= 1.0:
+            width_factor = 1.0 if dz < 0 else (0.25 + 0.75 * np.exp(-4.5 * dz))
+            dx = (x_axis[j] - c_x) / (r_x * width_factor)
+            if (dx**2 + dz**2) <= 1.0:
+                v_m, _, r_m = gassmann_substitution(
+                    vp_base[i, j], vs_mon[i, j], rho_base[i, j], phi_val, s_co2,
+                    site["k_m"], site["k_brine"], site["k_co2"], rho_brine_kg, rho_co2_kg, rho_matrix_kg,
+                    mixing_law, brie_exp
+                )
+                vp_mon[i, j] = v_m
+                rho_mon[i, j] = r_m
+
+# ── 4. MULTI-PAGE NAVIGATION ROUTER FUNCTIONS ──────────────────────────
 
 def page_overview():
-    st.title("🌐 Overview & Core Subsurface KPIs")
-    st.markdown("### Subsurface Evaluation Framework — SYLAUV Field Reference")
+    st.title("🌐 Overview & Consolidated Site Framework KPIs")
+    st.markdown(f"### Current Operation Model: **{selected_preset_name}**")
+    st.caption(site["description"])
     
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Mass Injected", f"{total_mass_mt:.3f} Mt")
-    col2.metric("In-Situ Pressure", f"{p_res:.2f} MPa")
-    col3.metric("CO2 Phase Density", f"{rho_co2_val:.1f} kg/m³")
-    col4.metric("Storage Capacity Factor", f"{storage_eff * 100:.2f} %")
+    col1.metric("Dynamic Net Sequestration", f"{total_mass_mt:.3f} Mt")
+    col2.metric("In-situ Subsurface Pressure", f"{p_res:.2f} MPa")
+    col3.metric("Mineral Frame Modulus (Km)", f"{site['k_m']:.1f} GPa")
+    col4.metric("Calculated Plume Radius", f"{current_radius:.2f} m")
     
     st.markdown("---")
-    st.markdown("""
-    ### Executive Summary
-    This multi-page suite simulates rock physics parameters and time-lapse 4D seismic anomaly responses 
-    associated with carbon sequestration inside the **Minahaki Carbonate Formation**. 
-    
-    Use the navigation menu in the sidebar to review specialized analytical components spanning volumetric plume expansion, 
-    stochastic heterogeneity cross-sections, exact Gassmann solvers, log displacement intervals, and real-time trace risk alert management.
-    """)
+    st.markdown("### Calibrated Preset Values Currently Locked In:")
+    st.json({
+        "Mineral Matrix Modulus (k_m)": f"{site['k_m']} GPa",
+        "Brine Modulus (k_brine)": f"{site['k_brine']} GPa",
+        "CO2 Compressibility Modulus (k_co2)": f"{site['k_co2']} GPa",
+        "Standard Matrix Density": f"{rho_matrix_kg} kg/m³",
+        "Brine Density Profile": f"{rho_brine_kg} kg/m³",
+        "CO2 Fluid Phase Density": f"{rho_co2_kg} kg/m³"
+    })
 
 def page_plume():
-    st.title("📊 CO2 Plume Growth & Uncertainty Band")
-    st.markdown("Modeled using dynamic gravity current flow constraints showing sub-linear expansion over time.")
+    st.title("📊 CO2 Plume Growth & Uncertainty Envelope")
+    st.markdown("Dynamic propagation model mapped with sub-linear power-law footprint expansion.")
     
     t_axis = np.linspace(0, 15, 100)
     mass_axis = (inj_rate * 1e9) * t_axis
     
-    # Uncertainty calculation based on porosity fluctuations (±3%)
-    eff_base = phi * net_to_gross * (1.0 - s_wirr)
-    eff_low = max(0.01, phi - 0.03) * net_to_gross * (1.0 - s_wirr)
-    eff_high = (phi + 0.03) * net_to_gross * (1.0 - s_wirr)
+    # Uncertainty envelope calculations based on local porosity variations
+    eff_low = max(0.01, phi_val - 0.03) * 0.75 * 0.75
+    eff_high = (phi_val + 0.03) * 0.75 * 0.75
     
-    r_base = np.sqrt(mass_axis / (np.pi * res_thickness * eff_base * rho_co2_val))
-    r_low = np.sqrt(mass_axis / (np.pi * res_thickness * eff_high * rho_co2_val))
-    r_high = np.sqrt(mass_axis / (np.pi * res_thickness * eff_low * rho_co2_val))
+    r_base = np.sqrt(mass_axis / (np.pi * res_thickness * storage_efficiency * rho_co2_kg))
+    r_envelope_low = np.sqrt(mass_axis / (np.pi * res_thickness * eff_high * rho_co2_kg))
+    r_envelope_high = np.sqrt(mass_axis / (np.pi * res_thickness * eff_low * rho_co2_kg))
     
-    fig, ax = plt.subplots(figsize=(10, 4.5))
-    ax.plot(t_axis, r_base, color='crimson', linewidth=2.5, label='Base Case Model')
-    ax.fill_between(t_axis, r_low, r_high, color='crimson', alpha=0.15, label='Porosity Uncertainty Envelope (±3%)')
-    ax.axvline(x=years, color='orange', linestyle='--', label='Selected Horizon')
+    fig, ax = plt.subplots(figsize=(10, 4.2))
+    ax.plot(t_axis, r_base, color='crimson', linewidth=2.5, label=f'Base Dynamic Model ({selected_preset_name})')
+    ax.fill_between(t_axis, r_envelope_low, r_envelope_high, color='crimson', alpha=0.15, label='Porosity Matrix Variance Band (±3%)')
+    ax.axvline(x=years, color='orange', linestyle='--', label='Target Evaluation Horizon')
     ax.scatter([years], [current_radius], color='black', zorder=5)
     
-    ax.set_xlabel('Injection Duration (Years)')
-    ax.set_ylabel('Plume Front Footprint Radius (meters)')
+    ax.set_xlabel('Injection Horizon Duration (Years)')
+    ax.set_ylabel('Lateral Radius Frontier (meters)')
     ax.legend(loc='upper left')
     ax.grid(True, alpha=0.3)
     st.pyplot(fig)
-    st.info(f"📐 Dynamic Radius Matrix: At Year {years:.1f}, the supercritical plume front extends to a lateral radius of {current_radius:.2f} meters.")
 
 def page_seismic_anomaly():
-    st.title("🌋 Stochastic 4D Vp Anomaly (Mushroom Plume)")
-    st.markdown("2D Geological slice cross-sections superimposed with **Gaussian Random Field Texture**.")
+    st.title("🌋 Stochastic 4D Vp Anomaly Grid")
+    st.markdown("2D geological slice visualization tracking buoyancy-driven fluid substitution.")
     
-    nx, nz = 160, 120
-    x, z = np.linspace(0, 4000, nx), np.linspace(1000, 2500, nz)
-    X, Z = np.meshgrid(x, z)
+    fig, axes = plt.subplots(2, 1, figsize=(10, 7.5), sharex=True)
     
-    np.random.seed(42)
-    spatial_noise = gaussian_filter(np.random.randn(nz, nx), sigma=(3, 12))
-    spatial_noise /= np.std(spatial_noise)
-    
-    vp_base = np.zeros((nz, nx))
-    for i in range(nz):
-        depth = z[i]
-        if depth < 1400:    vp_base[i, :] = 2600 + 0.45 * (depth - 1000)
-        elif depth < 1800:  vp_base[i, :] = 3100 + 0.55 * (depth - 1400)
-        else:               vp_base[i, :] = 3600 + 0.35 * (depth - 1800)
-            
-    vp_base *= (1.0 + 0.04 * spatial_noise)
-    vp_mon = vp_base.copy()
-    vs_mon = vp_base / 1.74
-    rho_base = (vp_base * 0.31) + 1.2
-    rho_mon = rho_base.copy()
-    
-    # Implements the buoyancy-driven mushroom plume geometry natively from vp_anomaly.py
-    c_x, c_z, r_x, r_z = 2000, res_depth, current_radius * 1.2, res_thickness * 0.6
-    k_m, k_b, k_c, rho_br, rho_co, rho_mat = 45.0, 2.8, 0.08, 1000.0, 700.0, 2.71
-    
-    for i in range(nz):
-        for j in range(nx):
-            dz = (z[i] - c_z) / r_z
-            if -1.0 <= dz <= 1.0:
-                width_factor = 1.0 if dz < 0 else (0.25 + 0.75 * np.exp(-4.5 * dz))
-                dx = (x[j] - c_x) / (r_x * width_factor)
-                if (dx**2 + dz**2) <= 1.0:
-                    v_m, s_m, r_m = gassmann_substitution(vp_base[i, j], vs_mon[i, j], rho_base[i, j], phi, s_co2, k_m, k_b, k_c, rho_br, rho_co, rho_mat)
-                    vp_mon[i, j], rho_mon[i, j] = v_m, r_m
-
-    fig, axes = plt.subplots(2, 1, figsize=(11, 8), sharex=True)
-    im1 = axes[0].pcolormesh(X, Z, vp_base, cmap='viridis', shading='auto')
-    axes[0].set_title('Stochastic Heterogeneous Baseline Structure (100% Brine Saturated)', weight='bold')
+    im1 = axes[0].pcolormesh(X_grid, Z_grid, vp_base, cmap='viridis', shading='auto')
     fig.colorbar(im1, ax=axes[0], label='Vp (m/s)')
+    axes[0].set_title(f'Baseline Model Structural Vp ({selected_preset_name})')
     
-    im2 = axes[1].pcolormesh(X, Z, vp_mon, cmap='viridis', shading='auto')
-    axes[1].set_title('Dynamic Heterogeneous Monitor Structure (Post-CO2 Mushroom Plume Allocation)', weight='bold')
+    im2 = axes[1].pcolormesh(X_grid, Z_grid, vp_mon, cmap='viridis', shading='auto')
     fig.colorbar(im2, ax=axes[1], label='Vp (m/s)')
+    axes[1].set_title('Monitor Post-Injection Mushroom Fluid Substitution Profile')
     
-    for ax in axes: ax.invert_yaxis(); ax.set_ylabel('Depth (m)')
-    axes[1].set_xlabel('Horizontal Axis Coordinate (m)')
+    for ax in axes: 
+        ax.invert_yaxis()
+        ax.set_ylabel('Subsurface Depth (m)')
+    axes[1].set_xlabel('Horizontal Coordinates (m)')
     plt.tight_layout()
     st.pyplot(fig)
-    
-    # Session state preservation for cross-page analytical syncing
-    st.session_state['vp_base'] = vp_base
-    st.session_state['rho_base'] = rho_base
-    st.session_state['vp_mon'] = vp_mon
-    st.session_state['rho_mon'] = rho_mon
-    st.session_state['x_axis'] = x
 
 def page_gassmann():
-    st.title("🧮 Gassmann Rock Physics Interactive Solver")
-    st.markdown("Evaluating bulk matrix softening tendencies against dynamic fluid displacement changes.")
+    st.title("🧮 Gassmann Curve Solver")
+    st.markdown("Simulating core elastic response boundaries inside porous matrices.")
     
-    s_co2_axis = np.linspace(0, 1.0, 100)
+    s_axis = np.linspace(0, 1.0, 50)
     vp_curve = []
     
-    k_m, k_b, k_c, rho_br, rho_co, rho_mat = 45.0, 2.8, 0.08, 1000.0, 700.0, 2.71
-    v_base_ref, vs_ref, rho_ref = 3500.0, 2000.0, 2.35
-    
-    for s in s_co2_axis:
-        v_m, _, _ = gassmann_substitution(v_base_ref, vs_ref, rho_ref, phi, s, k_m, k_b, k_c, rho_br, rho_co, rho_mat)
+    v_base_ref, vs_ref, rho_ref = 3200.0, 1850.0, rho_matrix_kg * 0.88
+    for s in s_axis:
+        v_m, _, _ = gassmann_substitution(
+            v_base_ref, vs_ref, rho_ref, phi_val, s,
+            site["k_m"], site["k_brine"], site["k_co2"], rho_brine_kg, rho_co2_kg, rho_matrix_kg,
+            mixing_law, brie_exp
+        )
         vp_curve.append(v_m)
         
-    fig, ax = plt.subplots(figsize=(9, 4.5))
-    ax.plot(s_co2_axis * 100, vp_curve, color='navy', linewidth=2.5, label='Theoretical Fluid Path')
-    ax.axvline(x=s_co2 * 100, color='orange', linestyle=':', label='Selected Operating Saturation')
-    ax.set_xlabel('CO2 Saturation Magnitude (%)')
-    ax.set_ylabel('Bulk Rock P-Wave Velocity (m/s)')
-    ax.set_title('Carbonate Matrix Softening Response Curve', weight='bold')
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.plot(s_axis * 100.0, vp_curve, color='navy', linewidth=2.5, label=f'Mixing Law: {mixing_law.upper()}')
+    ax.axvline(x=s_co2 * 100.0, color='orange', linestyle=':', label='Active Slider Saturation')
+    ax.set_xlabel('CO2 Saturation Volume (%)')
+    ax.set_ylabel('P-Wave Sonic Velocity Response (m/s)')
     ax.grid(True, alpha=0.3)
     ax.legend()
     st.pyplot(fig)
 
 def page_well_log():
-    st.title("🪵 Real Well Log Analysis (Sleipner Core Benchmark)")
-    st.markdown("Confining supercritical fluid substitution specifically inside the calibrated target storage sands.")
+    st.title("🪵 Well Section Log Analysis (Sleipner Confined Model)")
+    st.markdown("Restricting fluid substitution exclusively inside the target injection reservoir boundaries.")
     
-    log_depth = np.linspace(800, 1000, 300)
-    log_phi = np.clip(phi + 0.15 + 0.01 * np.random.randn(300), 0.15, 0.40)
-    log_rhob_base = 2.65 * (1 - log_phi) + 1.0 * log_phi
-    log_vp_base = 3800 - 2800 * log_phi
-    log_vs_base = log_vp_base / 2.0
-    log_vp_gassmann = log_vp_base.copy()
+    log_z = np.linspace(800, 1100, 200)
+    log_vp = 3700.0 - 2400.0 * phi_val + 50.0 * np.random.randn(200)
+    log_vs = log_vp / 1.85
+    log_rho_kg = np.full(200, rho_matrix_kg * 0.86)
     
-    k_m_sl, k_brine_sl, k_co2_sl, rho_brine_sl, rho_co2_sl, rho_matrix_sl = 37.0, 2.2, 0.06, 1030.0, 650.0, 2.65
-    for idx in range(len(log_depth)):
-        current_s_co2 = s_co2 if 900.0 <= log_depth[idx] <= 960.0 else 0.0
-        v_m, _, _ = gassmann_substitution(log_vp_base[idx], log_vs_base[idx], log_rhob_base[idx], log_phi[idx], current_s_co2, k_m_sl, k_brine_sl, k_co2_sl, rho_brine_sl, rho_co2_sl, rho_matrix_sl)
-        log_vp_gassmann[idx] = v_m
-
-    fig, axes = plt.subplots(1, 3, figsize=(11, 6), sharey=True)
-    axes[0].plot(log_phi, log_depth, color='green', alpha=0.7)
-    axes[0].set_xlabel('Porosity (v/v)')
-    axes[0].set_title('Log Porosity Profile', weight='bold')
-    axes[0].grid(True, alpha=0.3)
+    log_vp_mon = log_vp.copy()
+    for idx in range(len(log_z)):
+        current_s = s_co2 if 920.0 <= log_z[idx] <= 980.0 else 0.0
+        v_m, _, _ = gassmann_substitution(
+            log_vp[idx], log_vs[idx], log_rho_kg[idx], phi_val, current_s,
+            site["k_m"], site["k_brine"], site["k_co2"], rho_brine_kg, rho_co2_kg, rho_matrix_kg,
+            mixing_law, brie_exp
+        )
+        log_vp_mon[idx] = v_m
+        
+    fig, axes = plt.subplots(1, 2, figsize=(9, 5.5), sharey=True)
+    axes[0].plot(log_vp, log_z, color='gray', label='Baseline')
+    axes[0].plot(log_vp_mon, log_z, color='crimson', label='CO2 Substituted')
+    axes[0].axhspan(920, 980, color='yellow', alpha=0.15, label='Target Reservoir')
+    axes[0].set_xlabel('Velocity Vp (m/s)')
+    axes[0].legend(loc='lower left')
     
-    axes[1].plot(log_vp_base, log_depth, color='gray', alpha=0.7, label='Brine Baseline')
-    axes[1].plot(log_vp_gassmann, log_depth, color='crimson', linewidth=1.5, label='Gassmann Substitution')
-    axes[1].axhspan(900, 960, color='yellow', alpha=0.15, label='Reservoir Sand Target')
-    axes[1].set_xlabel('P-Wave Velocity (m/s)')
-    axes[1].set_title('Velocity Response Delta', weight='bold')
-    axes[1].grid(True, alpha=0.3)
-    axes[1].legend(loc='lower left', fontsize='small')
-    
-    log_delta_vp = ((log_vp_gassmann - log_vp_base) / log_vp_base) * 100
-    axes3_2 = axes[2].plot(log_delta_vp, log_depth, color='crimson', linewidth=1.5)
-    axes[2].axhspan(900, 960, color='yellow', alpha=0.15)
-    axes[2].set_xlabel('Velocity Change ΔVp (%)')
-    axes[2].set_title('4D Log Anomaly (%)', weight='bold')
-    axes[2].grid(True, alpha=0.3)
+    axes[1].plot(((log_vp_mon - log_vp)/log_vp)*100.0, log_z, color='crimson')
+    axes[1].axhspan(920, 980, color='yellow', alpha=0.15)
+    axes[1].set_xlabel('Delta Velocity Anomaly ΔVp (%)')
     
     axes[0].invert_yaxis()
-    axes[0].set_ylabel('Subsurface Depth (m)', fontsize=11, weight='bold')
+    axes[0].set_ylabel('Log Measured Depth (m)')
     plt.tight_layout()
     st.pyplot(fig)
 
 def page_alerts():
-    st.title("🚨 Anomaly Detection & Safe Operating Alerts")
-    st.markdown("### Trace Analytics Engine — Zero-Mean Convolution Framework")
+    st.title("🚨 Automated Anomaly Alerts Console")
+    st.markdown("### Modul 6 Analytics: Combined Time-Lapse Trace Analytics Framework")
     
-    if 'vp_base' in st.session_state:
-        vp_base = st.session_state['vp_base']
-        rho_base = st.session_state['rho_base']
-        vp_mon = st.session_state['vp_mon']
-        rho_mon = st.session_state['rho_mon']
-        x = st.session_state['x_axis']
-    else:
-        nx = 160
-        x = np.linspace(0, 4000, nx)
-        vp_base = np.full((120, nx), 3200.0)
-        rho_base = np.full((120, nx), 2.30)
-        vp_mon = vp_base.copy()
-        vp_mon[50:70, 60:100] *= 0.96
-        rho_mon = rho_base.copy()
-
-    wavelet = create_ricker_wavelet(freq)
-    nrms_profile = np.zeros(len(x))
+    # Live execution utilizing real-time calculated global matrices
+    nrms_profile = calculate_4d_trace_nrms(vp_base, rho_base, vp_mon, rho_mon, frequency=wavelet_freq)
+    z_score_field = compute_velocity_z_score(vp_base, vp_mon)
+    max_z_profile = np.abs(np.min(z_score_field, axis=0))
     
-    for col in range(len(x)):
-        t_base = generate_seismic_trace(vp_base[:, col], rho_base[:, col], wavelet)
-        t_mon = generate_seismic_trace(vp_mon[:, col], rho_mon[:, col], wavelet)
-        diff = t_base - t_mon
-        denom = 0.5 * (np.sqrt(np.mean(t_base**2)) + np.sqrt(np.mean(t_mon**2)))
-        nrms_profile[col] = (np.sqrt(np.mean(diff**2)) / denom) * 100 if denom > 1e-6 else 0.0
-
-    fig, ax = plt.subplots(figsize=(10, 4))
-    ax.plot(x, nrms_profile, color='black', linewidth=2, label='4D Seismic Trace nRMS Anomaly')
-    ax.axhline(y=threshold, color='red', linestyle=':', linewidth=2, label='Safety Limit Threshold')
-    ax.fill_between(x, nrms_profile, threshold, where=(nrms_profile > threshold), color='red', alpha=0.3, label='Critical Breach Zone')
+    col_left, col_right = st.columns([1, 1])
     
-    ax.set_ylabel('Detector Response (%)')
-    ax.set_xlabel('Horizontal Cross-Section Axis Coordinate (m)')
-    ax.set_title('Time-Lapse Zero-Mean Trace nRMS Anomaly Profiler', weight='bold')
-    ax.set_ylim(0, max(15.0, np.max(nrms_profile) * 1.3))
-    ax.grid(True, alpha=0.4)
-    ax.legend(loc='upper left')
-    st.pyplot(fig)
-    
+    with col_left:
+        st.subheader("4D Seismic nRMS Profile")
+        fig_nrms, ax_nrms = plt.subplots(figsize=(6, 4))
+        ax_nrms.plot(x_axis, nrms_profile, color='black', linewidth=2, label='Seismic nRMS')
+        ax_nrms.axhline(y=alert_threshold, color='red', linestyle=':', linewidth=2, label='Safety Limit')
+        ax_nrms.fill_between(x_axis, nrms_profile, alert_threshold, where=(nrms_profile > alert_threshold), color='red', alpha=0.3)
+        ax_nrms.set_ylabel('Detector Response (%)')
+        ax_nrms.set_xlabel('Horizontal Coordinate (m)')
+        ax_nrms.set_ylim(0, max(20.0, np.max(nrms_profile) * 1.2))
+        ax_nrms.grid(True, alpha=0.3)
+        ax_nrms.legend()
+        st.pyplot(fig_nrms)
+        
+    with col_right:
+        st.subheader("Statistical Variance Deviation")
+        fig_z, ax_z = plt.subplots(figsize=(6, 4))
+        ax_z.plot(x_axis, max_z_profile, color='darkblue', linewidth=2, label='Local Sigma Profile')
+        ax_z.axhline(y=3.0, color='purple', linestyle='--', label='Confidence Bound (3σ)')
+        ax_z.set_ylabel('Absolute Z-Score (|Z|)')
+        ax_z.set_xlabel('Horizontal Coordinate (m)')
+        ax_z.grid(True, alpha=0.3)
+        ax_z.legend()
+        st.pyplot(fig_z)
+        
     max_nrms = np.max(nrms_profile)
-    st.markdown("---")
-    st.subheader("Containment Evaluation Diagnostics")
+    max_z = np.max(max_z_profile)
     
-    if max_nrms > threshold:
-        st.error(f"🚨 CRITICAL ALARM: Caprock containment boundary anomaly detected! Peak 4D seismic change reaches {max_nrms:.2f}%, breaching the designated safety limit of {threshold:.1f}%. Immediate migration tracking required.")
+    st.markdown("---")
+    st.subheader("Subsurface Diagnostics Verification Matrix")
+    
+    if max_nrms > alert_threshold or max_z > 3.0:
+        st.error(f"""
+        🚨 **CRITICAL ALARM: CAPROCK RECOVERY WARNING** * Peak Localized nRMS Amplitude: **{max_nrms:.2f}%** (Safety Limit: {alert_threshold:.1f}%).  
+        * Maximum Local Variance Deviation: **{max_z:.2f}σ** (Statistical Bound: 3.0σ).  
+        
+        **Interpretation:** High-probability trace anomaly detected. Localized variance deviation confirms fluid propagation bypassing primary reservoir seals. Action required.
+        """)
     else:
-        st.success(f"✅ CONTAINMENT SECURE: Subsurface fluid displacement stable. Peak localized response stands at {max_nrms:.2f}%, running safely below the threshold limit.")
+        st.success(f"""
+        ✅ **SUBSURFACE STORAGE INTEGRITY SYSTEM SECURE** * Peak Localized nRMS Amplitude: **{max_nrms:.2f}%** (Operating safely below the threshold).  
+        * Maximum Local Variance Deviation: **{max_z:.2f}σ** (Normal geological background noise signatures).  
+        
+        **Interpretation:** Fluid displacement confined within expected structural frameworks under the caprock matrix.
+        """)
 
-# ── ROUTING NAVIGATION ROUTER MATRIX ──────────────────────────────
+# ── 5. ROUTING ROUTER MENU SELECTION MANAGEMENT ───────────────────────
 pages_matrix = {
-    "🌐 Overview / KPI": page_overview,
-    "📊 Plume Growth": page_plume,
-    "🌋 4D Vp Anomaly": page_seismic_anomaly,
-    "🧮 Gassmann Rock Physics": page_gassmann,
-    "🪵 Real Well Log (Sleipner)": page_well_log,
-    "🚨 Anomaly Detection & Alerts": page_alerts
+    "🌐 Overview / KPI Matrix": page_overview,
+    "📊 Plume Growth Footprint": page_plume,
+    "🌋 4D Vp Anomaly Grid": page_seismic_anomaly,
+    "🧮 Gassmann Curve Solver": page_gassmann,
+    "🪵 Well Section Log Analysis": page_well_log,
+    "🚨 Anomaly Alerts Console": page_alerts
 }
 
-selected_page_name = st.sidebar.radio("🧭 Suite Navigation Menu", list(pages_matrix.keys()))
+selected_page_name = st.sidebar.radio("🧭 Execution Navigation Menu", list(pages_matrix.keys()))
 pages_matrix[selected_page_name]()
