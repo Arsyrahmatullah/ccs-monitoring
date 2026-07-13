@@ -11,7 +11,6 @@ import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
-import lasio
 
 from ccs_monitoring.presets import RESERVOIR_PRESETS, NOISE_FLOOR_PRESETS
 from ccs_monitoring.Rock_physics.gassmann import gassmann_substitution
@@ -199,7 +198,10 @@ def page_gassmann():
     st.pyplot(fig)
 
 def page_well_log():
-    st.title("🪵 Target Interval Perforation Log substitutions")
+    st.title("🪵 Target Interval Perforation Log Simulation")
+    st.markdown("### Continuous Vertical Wireline Profile Evaluation")
+    st.caption("Demonstrating 1D Gassmann fluid substitution dynamics across a continuous calibrated reservoir interval.")
+    
     log_z = np.linspace(800, 1100, 200)
     log_phi = np.clip(phi_val + 0.12 + 0.02 * np.random.randn(200), 0.08, 0.45)
     log_rho = 2680.0 * (1.0 - log_phi) + 1000.0 * log_phi
@@ -339,7 +341,7 @@ pages_matrix = {
     "📊 Plume Uncertainty Bounds": page_plume,
     "🌋 Graded Buoyant 2D Mesh": page_seismic_anomaly,
     "🧮 Gassmann Curve Matrix": page_gassmann,
-    "🪵 Wireline LAS Section Analysis": page_well_log,
+    "🪵 Well Log Interval Analysis": page_well_log,
     "🚨 Core Alerts Diagnostic Console": page_alerts,
     "⏱️ Crown Flagship: Detectability Timeline": page_detectability_timeline
 }
