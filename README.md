@@ -29,8 +29,7 @@ Visualizes the lateral radial expansion footprint of the injected carbon mass ov
 - Driven by a fluid-dynamic gravity current power-law model ($t^{0.5}$).
 - Features a **Porosity Uncertainty Band (±3%)** to map subsurface reservoir matrix variances.
 
-**Output:**
-![CO2 Plume Growth](src/ccs_monitoring/Plume/plume_growth.png)
+**Output:** ![CO2 Plume Growth](src/ccs_monitoring/Plume/plume_growth.png)
 
 ---
 
@@ -39,8 +38,7 @@ Generates 2D geological slice cross-sections displaying velocity responses post-
 - Implements a **Gaussian Random Field Texture** to mimic realistic geological background noise textures.
 - Models a buoyancy-driven **mushroom-shaped CO₂ plume** framework natively synchronized across the suite.
 
-**Output:**
-![Vp Anomaly](src/ccs_monitoring/Seismic/vp_anomaly.png)
+**Output:** ![Vp Anomaly](src/ccs_monitoring/Seismic/vp_anomaly.png)
 
 ---
 
@@ -49,35 +47,21 @@ Rock physics engine evaluating subsurface acoustic velocity shifts caused by car
 - Employs an **Exact Symbolic Inversion** derived via `sympy` to solve for dry rock modulus ($K_{dry}$) without fluid compressibility approximation errors.
 - **Toggle Matrix Theory**: Selectable fluid mixing laws between Wood's Law (Uniform Saturation) and Brie's Empirical Law (Patchy Saturation).
 
-**Output:**
-![Gassmann](src/ccs_monitoring/Rock_physics/gassmann.png)
+**Output:** ![Gassmann](src/ccs_monitoring/Rock_physics/gassmann.png)
 
 ---
 
-### 5. Well Log Integration & Multi-Page Dashboard (`src/ccs_monitoring/Dashboard/`)
-An interactive multi-page web application managing all modules via a unified, reactive sidebar radio navigation matrix.
-- **LAS File Uploader**: Features a native `.las` wireline log parsing interface powered by `lasio`.
-- Generates dynamic synthetic fallback proxy models automatically for seamless testing.
+### 5. Well Log Interval Analysis (`src/ccs_monitoring/Dashboard/`)
+Evaluates the continuous vertical response of rock matrix softening. Synthesizes velocity modifications along a dense 1D wireline track framework to contrast baseline states against carbon-saturated formations.
 
 ---
 
 ### 6. Anomaly Detection & Alerts (`src/ccs_monitoring/Anomaly/`)
 Integrates core trace analytics and risk containment diagnostics to evaluate operational boundaries.
-- **Zero-Mean Trace nRMS Profile**: Converts properties into a synthetic seismic trace via Reflection Coefficient convolution with a symmetric Ricker Wavelet to prevent detector sensitivity collapse.
-- **Statistical Z-Score Deviation Field**: Isolates fluid migration anomalies from background geostatistical noise.
+- **Zero-Mean Trace nRMS Profile:** Converts properties into a synthetic seismic trace via Reflection Coefficient convolution with a symmetric Ricker Wavelet to prevent detector sensitivity collapse.
+- **Statistical Z-Score Deviation Field:** Isolates fluid migration anomalies from background geostatistical noise.
 
-**Output:**
-![Anomaly Detection](src/ccs_monitoring/Anomaly/anomaly_detection.png)
-
----
-
-## 📥 Data Setup
-
-The *Well Log Analysis* module dynamically reads custom user-supplied files. If you want to benchmark the system using the official Sleipner dataset from Equinor:
-
-1. Go to: **https://co2datashare.org/dataset/sleipner-2019-benchmark-model**
-2. Download **"Well data (2.1.2 - Well logs)"**
-3. Extract the contents and use the **Upload** button directly inside the dashboard panel to submit your target `.las` file format.
+**Output:** ![Anomaly Detection](src/ccs_monitoring/Anomaly/anomaly_detection.png)
 
 ---
 
@@ -88,7 +72,6 @@ The *Well Log Analysis* module dynamically reads custom user-supplied files. If 
 | NumPy, SciPy | Numerical grid matrix computation |
 | Matplotlib | Subsurface visualization and plotting |
 | Streamlit | Interactive multi-page dashboard presentation layer |
-| lasio | LAS wireline log file reader engine |
 | PyTest | Automated physics regression testing |
 
 ---
