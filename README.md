@@ -63,7 +63,7 @@ An interactive multi-page web application managing all modules via a unified, re
 
 ### 6. Anomaly Detection & Alerts (`src/ccs_monitoring/Anomaly/`)
 Integrates core trace analytics and risk containment diagnostics to evaluate operational boundaries.
-- **Zero-Mean Trace nRMS Profile**: Converts properties into a synthetic seismic trace via Ricker Wavelet convolution to prevent detector sensitivity collapse.
+- **Zero-Mean Trace nRMS Profile**: Converts properties into a synthetic seismic trace via Reflection Coefficient convolution with a symmetric Ricker Wavelet to prevent detector sensitivity collapse.
 - **Statistical Z-Score Deviation Field**: Isolates fluid migration anomalies from background geostatistical noise.
 
 **Output:**
@@ -77,7 +77,7 @@ The *Well Log Analysis* module dynamically reads custom user-supplied files. If 
 
 1. Go to: **https://co2datashare.org/dataset/sleipner-2019-benchmark-model**
 2. Download **"Well data (2.1.2 - Well logs)"**
-3. Extract the contents and use the **Upload** button directly inside the dashboard panel to submit your target `.las` file.
+3. Extract the contents and use the **Upload** button directly inside the dashboard panel to submit your target `.las` file format.
 
 ---
 
